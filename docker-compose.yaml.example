@@ -1,0 +1,10 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SPOTIFY_CLIENT_ID=""
+      - SPOTIFY_CLIENT_SECRET=""
+      - APP_BASE_URL=""
+      - ENV=prod #set as dev or prod
