@@ -1,7 +1,7 @@
 from flask import Blueprint, request, session, redirect, jsonify
 from urllib.parse import urlencode
 from utils.spotify import get_auth_code_obj, get_token_header, get_expired_date, extract_track, get_track_hash
-from flask_jwt_extended import jwt_required, create_access_token, get_jwt_identity, unset_jwt_cookies
+from flask_jwt_extended import jwt_required, create_access_token, get_jwt_identity, unset_jwt_cookies, verify_jwt_in_request
 from datetime import datetime
 import os
 import requests
@@ -38,8 +38,10 @@ def spotify_callback():
         # access_token = access_token_obj['access_token']
         access_token_obj['expire_date'] = get_expired_date(access_token_obj['expires_in'])
         # d['code'] = session['spotify_code']
+    # print(request.referrer)
     resp = redirect(session['referrer_url'])
-    resp.set_cookie('jwt', create_access_token(access_token_obj))
+    resp.set_cookie(key='jwt', value=create_access_token(access_token_obj), domain=os.getenv('APP_BASE_DOMAIN'))
+    session['test'] = True
     return resp
 
 @auth_app.route('/auth/logout', methods=["GET"])
@@ -48,13 +50,18 @@ def spotify_logout():
     session.clear()
     unset_jwt_cookies(d)
     resp = redirect(request.referrer)
-    resp.set_cookie('jwt', expires=datetime.now())
+    resp.delete_cookie('jwt', domain=os.getenv('APP_BASE_DOMAIN'))
     return resp
 
 @auth_app.route('/authenticated', methods=["GET"])
 @jwt_required()
 def spotify_authenticated():
-    return {'status': 200, 'authenticated': True}
+    try:
+        return {'status': 200, 'authenticated': True}
+    except Exception as e:
+        print(e)
+        return {'status': 200, 'authenticated': False}
+    
 
 @auth_app.route('/playlists', methods=["GET", "PUT"])
 @jwt_required()

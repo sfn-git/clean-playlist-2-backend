@@ -7,4 +7,5 @@ services:
       - SPOTIFY_CLIENT_ID=""
       - SPOTIFY_CLIENT_SECRET=""
       - APP_BASE_URL=""
+      - APP_BASE_DOMAIN=""
       - ENV=prod #set as dev or prod

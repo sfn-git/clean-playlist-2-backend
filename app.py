@@ -14,14 +14,13 @@ app.register_blueprint(auth_app, url_prefix='/spotify')
 jwt = JWTManager(app)
 
 if os.getenv('ENV') == 'prod':
-    app.config['JWT_SECRET_KEY'] = token_hex() #sessions will restart on app reset
+    app.config['JWT_SECRET_KEY'] = token_hex(256) #sessions will restart on app reset
     app.secret_key = token_hex() #sessions will restart on app reset
 else:
     app.config['JWT_SECRET_KEY'] = "development" #session will stay
     app.secret_key = "development" #session will stay
 
 CORS(app)
-
 
 @app.errorhandler(404)
 def page_not_found(error):
