@@ -29,9 +29,9 @@ app.config.from_object(__name__)
 
 if os.getenv('ENV') == 'prod':
     SESSION_COOKIE_SECURE = True
-    app.secret_key = token_hex(256) #sessions will restart on app reset
+    app.secret_key = token_hex() #sessions will restart on app reset
 else:
-    app.secret_key = "development" #session will stay
+    app.secret_key = "development" #session will stay on app reset
 
 Session(app)
 CORS(app)
