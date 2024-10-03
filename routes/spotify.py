@@ -1,13 +1,21 @@
 from flask import Blueprint, request, session, redirect, jsonify
 from urllib.parse import urlencode
-from utils.spotify import get_auth_code_obj, get_token_header, get_expired_date, extract_track, get_track_hash
-from flask_jwt_extended import jwt_required, create_access_token, get_jwt_identity, unset_jwt_cookies, verify_jwt_in_request
-from datetime import datetime
+from utils.spotify import get_auth_code_obj, get_token_header, get_expired_date, extract_track, get_track_hash, check_authentication
+from functools import wraps
 import os
 import requests
 import math
 
 auth_app = Blueprint('auth', __name__)
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if check_authentication(session) is None:
+            return {'status': 401, 'message': 'Not authorized to view resource'}, 401
+        else:
+            return f(*args, **kwargs)
+    return decorated_function
 
 @auth_app.route('/auth', methods=["GET", "POST"])
 def spotify_auth():
@@ -35,39 +43,35 @@ def spotify_callback():
     else:
         spotify_code = request.args["code"]
         access_token_obj = get_auth_code_obj(spotify_code)
-        # access_token = access_token_obj['access_token']
+        access_token = access_token_obj['access_token']
         access_token_obj['expire_date'] = get_expired_date(access_token_obj['expires_in'])
+        session['access_token'] = access_token
+        session['access_token_obj'] = access_token_obj
         # d['code'] = session['spotify_code']
     # print(request.referrer)
     resp = redirect(session['referrer_url'])
-    resp.set_cookie(key='jwt', value=create_access_token(access_token_obj), domain=os.getenv('APP_BASE_DOMAIN'))
-    session['test'] = True
     return resp
 
 @auth_app.route('/auth/logout', methods=["GET"])
 def spotify_logout():
     d = jsonify({'status': 200, 'message': 'Logged out of Spotify successfully'})
     session.clear()
-    unset_jwt_cookies(d)
     resp = redirect(request.referrer)
-    resp.delete_cookie('jwt', domain=os.getenv('APP_BASE_DOMAIN'))
     return resp
 
 @auth_app.route('/authenticated', methods=["GET"])
-@jwt_required()
+@requires_auth
 def spotify_authenticated():
     try:
         return {'status': 200, 'authenticated': True}
     except Exception as e:
-        print(e)
         return {'status': 200, 'authenticated': False}
     
 
 @auth_app.route('/playlists', methods=["GET", "PUT"])
-@jwt_required()
+@requires_auth
 def all_spotify_playlists():
-    jwt_data = get_jwt_identity()
-    header = get_token_header(jwt_data['access_token'])
+    header = get_token_header(session['access_token'])
     if request.method == 'GET':
         page_args = request.args.get("page")
         page = 0
@@ -102,18 +106,16 @@ def all_spotify_playlists():
         return {'playlistID': new_playlist_id}, 200
 
 @auth_app.route('/playlists/<pid>', methods=["GET"])
-@jwt_required()
+@requires_auth
 def get_spotify_playlist(pid):
-    jwt_data = get_jwt_identity()
     url = f'https://api.spotify.com/v1/playlists/{pid}'
-    header = get_token_header(jwt_data['access_token'])
+    header = get_token_header(session['access_token'])
     playlist_response = requests.get(url, headers=header)
     return playlist_response.json()
 
 @auth_app.route('/playlists/<pid>/tracks', methods=["GET"])
-@jwt_required()
+@requires_auth
 def get_spotify_playlist_tracks(pid):
-    jwt_data = get_jwt_identity()
     tracks = {'items': []}
     next = True
     first = True
@@ -122,7 +124,7 @@ def get_spotify_playlist_tracks(pid):
         if first:
             url = f'https://api.spotify.com/v1/playlists/{pid}/tracks'
             first = False
-        header = get_token_header(jwt_data['access_token'])
+        header = get_token_header(session['access_token'])
         playlist_track_response = requests.get(url, headers=header).json()
         tracks['items'].extend(playlist_track_response['items'])
         url = playlist_track_response.get('next')
@@ -133,7 +135,7 @@ def get_spotify_playlist_tracks(pid):
     return tracks
 
 @auth_app.route('/tracks/<tid>', methods=["GET"])
-@jwt_required()
+@requires_auth
 def get_spotify_tracks(tid):
     url = f'https://api.spotify.com/v1/tracks/{tid}'
     header = get_token_header(session['access_token'])
@@ -142,10 +144,10 @@ def get_spotify_tracks(tid):
     # return track_response
 
 @auth_app.route('/tracks/<tid>/clean', methods=["GET"])
-@jwt_required()
+@requires_auth
 def search_spotify_clean_tracks(tid):
     url = f'https://api.spotify.com/v1/tracks/{tid}'
-    header = get_token_header(get_jwt_identity()['access_token'])
+    header = get_token_header(session['access_token'])
     track_response = requests.get(url, headers=header).json()
     if not track_response['explicit']:
         return {'items': track_response, 'exact_match': True}
@@ -168,7 +170,7 @@ def search_spotify_clean_tracks(tid):
     return {'items': search_response_obj, 'exact_match': False}
 
 # @auth_app.route('/playlists/<pid>/clean', methods=["GET"])
-# @jwt_required()
+# @requires_auth
 # def clean_spotify_playlist(pid):
 #     tracks = list()
 #     next = True

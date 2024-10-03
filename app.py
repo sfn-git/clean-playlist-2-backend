@@ -4,22 +4,36 @@ from routes.index import index_app
 from routes.spotify import auth_app
 from dotenv import load_dotenv
 from secrets import token_hex
-from flask_jwt_extended import JWTManager
+from flask_session import Session #https://flask-session.readthedocs.io/en/latest/introduction.html
+from cachelib.file import FileSystemCache
 import os
+import shutil
+
+# Handles sessions directory
+dir_path="./sessions"
+if os.path.exists(dir_path):
+    shutil.rmtree(dir_path)
+
+os.makedirs(dir_path)
 
 load_dotenv()
 app = Flask(__name__)
 app.register_blueprint(index_app, url_prefix='/')
 app.register_blueprint(auth_app, url_prefix='/spotify')
-jwt = JWTManager(app)
+
+SESSION_TYPE = 'cachelib'
+SESSION_COOKIE_DOMAIN = os.getenv('APP_BASE_DOMAIN')
+SESSION_CACHELIB = FileSystemCache(threshold=500, cache_dir="./sessions")
+SESSION_USE_SIGNER = True
+app.config.from_object(__name__)
 
 if os.getenv('ENV') == 'prod':
-    app.config['JWT_SECRET_KEY'] = token_hex(256) #sessions will restart on app reset
-    app.secret_key = token_hex() #sessions will restart on app reset
+    SESSION_COOKIE_SECURE = True
+    app.secret_key = token_hex(256) #sessions will restart on app reset
 else:
-    app.config['JWT_SECRET_KEY'] = "development" #session will stay
     app.secret_key = "development" #session will stay
 
+Session(app)
 CORS(app)
 
 @app.errorhandler(404)
