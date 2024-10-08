@@ -31,7 +31,7 @@ if os.getenv('ENV') == 'prod':
 else:
     app.secret_key = "development" #session will stay on app reset
 
-CORS(app)
+CORS(app, supports_credentials=True)
 Session(app)
 
 @app.errorhandler(404)
