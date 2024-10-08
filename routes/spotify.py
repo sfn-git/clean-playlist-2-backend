@@ -26,8 +26,12 @@ def spotify_auth():
         'redirect_uri': redirect_url,
         'scope': 'playlist-modify-public playlist-modify-private playlist-read-collaborative playlist-read-private',
     }
+    if os.getenv('ENV') is not "prod":
+        query_parameters['show_dialog'] = True
     spotify_url = 'https://accounts.spotify.com/authorize?' + urlencode(query_parameters)
     session['referrer_url'] = request.referrer
+    session.modified = True
+    # print(session['referrer_url'])
     return redirect(spotify_url)
     # return {'status':200, 'message': spotify_url}
 
@@ -60,10 +64,10 @@ def spotify_logout():
     return resp
 
 @auth_app.route('/authenticated', methods=["GET"])
-@requires_auth
 def spotify_authenticated():
     try:
-        return {'status': 200, 'authenticated': True}
+        if session['access_token'] is not None:
+            return {'status': 200, 'authenticated': True}
     except Exception as e:
         return {'status': 200, 'authenticated': False}
     
