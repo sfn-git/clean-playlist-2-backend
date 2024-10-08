@@ -6,6 +6,7 @@ import os
 import requests
 import math
 
+FRONTEND_URL = os.getenv('FRONTEND_URL')
 auth_app = Blueprint('auth', __name__)
 
 def requires_auth(f):
@@ -26,12 +27,12 @@ def spotify_auth():
         'redirect_uri': redirect_url,
         'scope': 'playlist-modify-public playlist-modify-private playlist-read-collaborative playlist-read-private',
     }
-    if os.getenv('ENV') is not "prod":
+    if os.getenv('ENV') != "prod":
         query_parameters['show_dialog'] = True
     spotify_url = 'https://accounts.spotify.com/authorize?' + urlencode(query_parameters)
-    session['referrer_url'] = request.referrer
+    FRONTEND_URL = request.referrer
     session.modified = True
-    # print(session['referrer_url'])
+    # print(FRONTEND_URL)
     return redirect(spotify_url)
     # return {'status':200, 'message': spotify_url}
 
@@ -53,23 +54,24 @@ def spotify_callback():
         session['access_token_obj'] = access_token_obj
         # d['code'] = session['spotify_code']
     # print(request.referrer)
-    resp = redirect(session['referrer_url'])
+    resp = redirect(FRONTEND_URL)
     return resp
 
 @auth_app.route('/auth/logout', methods=["GET"])
 def spotify_logout():
     d = jsonify({'status': 200, 'message': 'Logged out of Spotify successfully'})
     session.clear()
-    resp = redirect(request.referrer)
+    resp = redirect(FRONTEND_URL)
     return resp
 
 @auth_app.route('/authenticated', methods=["GET"])
 def spotify_authenticated():
     try:
-        if session['access_token'] is not None:
+        if session['access_token'] != None:
             return {'status': 200, 'authenticated': True}
     except Exception as e:
-        return {'status': 200, 'authenticated': False}
+        return {'status': 200, 'authenticated': False, 'error': f"{e}"}
+        # return {'status': 200, 'authenticated': True}
     
 
 @auth_app.route('/playlists', methods=["GET", "PUT"])

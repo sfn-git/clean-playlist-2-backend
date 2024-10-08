@@ -11,10 +11,8 @@ import shutil
 
 # Handles sessions directory
 dir_path="./sessions"
-if os.path.exists(dir_path):
-    shutil.rmtree(dir_path)
-
-os.makedirs(dir_path)
+if not os.path.exists(dir_path):
+    os.makedirs(dir_path)
 
 load_dotenv()
 app = Flask(__name__)
@@ -33,8 +31,8 @@ if os.getenv('ENV') == 'prod':
 else:
     app.secret_key = "development" #session will stay on app reset
 
-Session(app)
 CORS(app)
+Session(app)
 
 @app.errorhandler(404)
 def page_not_found(error):
