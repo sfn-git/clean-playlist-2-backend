@@ -6,6 +6,7 @@ import os
 import requests
 import math
 
+PAGE_LIMIT = int(os.getenv('PAGE_LIMIT'))
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 auth_app = Blueprint('auth', __name__)
 
@@ -81,8 +82,8 @@ def all_spotify_playlists():
     if request.method == 'GET':
         page_args = request.args.get("page")
         page = 0
-        if  page_args is not None: page = (int(page_args)-1) * 10
-        url = f'https://api.spotify.com/v1/me/playlists?offset={page}&limit=10'
+        if  page_args is not None: page = (int(page_args)-1) * PAGE_LIMIT
+        url = f'https://api.spotify.com/v1/me/playlists?offset={page}&limit={PAGE_LIMIT}'
         playlist_response = requests.get(url, headers=header)
         return playlist_response.json()
     elif request.method == 'PUT':
@@ -140,6 +141,26 @@ def get_spotify_playlist_tracks(pid):
             continue
     return tracks
 
+@auth_app.route('/playlists/search', methods=["GET"])
+@requires_auth
+def search_playlists():
+    search_query = request.args['q']
+    page = request.args.get('p')
+    offset = 0
+    if page != '1': offset = (int(page)-1) * PAGE_LIMIT
+    url = f'https://api.spotify.com/v1/search?q={search_query}&type=playlist&limit={PAGE_LIMIT}&offset={offset}'
+    header = get_token_header(session["access_token"])
+    res = requests.get(url, headers=header)
+    return {'status': 200, 'data': res.json()}
+
+# @auth_app.route('/playlists/search/<page>', methods=["GET"])
+# @requires_auth
+# def search_playlists_page(page):
+#     header = get_token_header(session["access_token"])
+#     res = requests.get(page, headers=header)
+#     return {'status': 200, 'data': res.json()}
+
+# Tracks
 @auth_app.route('/tracks/<tid>', methods=["GET"])
 @requires_auth
 def get_spotify_tracks(tid):
