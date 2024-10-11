@@ -4,3 +4,5 @@ env
 docker-compose.yaml
 debug.log
 sessions
+logs
+*.log

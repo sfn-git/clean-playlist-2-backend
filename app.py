@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from secrets import token_hex
 from flask_session import Session #https://flask-session.readthedocs.io/en/latest/introduction.html
 from cachelib.file import FileSystemCache
+from utils.logging import logging
 import os
 import shutil
 
@@ -25,11 +26,15 @@ SESSION_CACHELIB = FileSystemCache(threshold=500, cache_dir="./sessions")
 SESSION_USE_SIGNER = True
 app.config.from_object(__name__)
 
-if os.getenv('ENV') == 'prod':
+ENV = os.getenv('ENV')
+
+if ENV == 'prod':
     SESSION_COOKIE_SECURE = True
     app.secret_key = token_hex() #sessions will restart on app reset
+    logging.warning(f"Running in {ENV}")
 else:
     app.secret_key = "development" #session will stay on app reset
+    logging.info(f"Running in {ENV}")
 
 CORS(app, supports_credentials=True)
 Session(app)

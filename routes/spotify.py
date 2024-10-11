@@ -2,11 +2,18 @@ from flask import Blueprint, request, session, redirect, jsonify
 from urllib.parse import urlencode
 from utils.spotify import get_auth_code_obj, get_token_header, get_expired_date, extract_track, get_track_hash, check_authentication
 from functools import wraps
+from utils.logging import logging
 import os
 import requests
 import math
 
-PAGE_LIMIT = int(os.getenv('PAGE_LIMIT'))
+PAGE_LIMIT = 10
+
+try:
+    PAGE_LIMIT = int(os.getenv('PAGE_LIMIT'))
+    logging.info(f"Page limit set to {PAGE_LIMIT}")
+except TypeError as e:
+    logging.warning("No page limit was set. Default set to 10")
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 auth_app = Blueprint('auth', __name__)
 
@@ -31,9 +38,6 @@ def spotify_auth():
     if os.getenv('ENV') != "prod":
         query_parameters['show_dialog'] = True
     spotify_url = 'https://accounts.spotify.com/authorize?' + urlencode(query_parameters)
-    FRONTEND_URL = request.referrer
-    session.modified = True
-    # print(FRONTEND_URL)
     return redirect(spotify_url)
     # return {'status':200, 'message': spotify_url}
 
@@ -53,8 +57,6 @@ def spotify_callback():
         access_token_obj['expire_date'] = get_expired_date(access_token_obj['expires_in'])
         session['access_token'] = access_token
         session['access_token_obj'] = access_token_obj
-        # d['code'] = session['spotify_code']
-    # print(request.referrer)
     resp = redirect(FRONTEND_URL)
     return resp
 
@@ -78,123 +80,144 @@ def spotify_authenticated():
 @auth_app.route('/playlists', methods=["GET", "PUT"])
 @requires_auth
 def all_spotify_playlists():
-    header = get_token_header(session['access_token'])
-    if request.method == 'GET':
-        page_args = request.args.get("page")
-        page = 0
-        if  page_args is not None: page = (int(page_args)-1) * PAGE_LIMIT
-        url = f'https://api.spotify.com/v1/me/playlists?offset={page}&limit={PAGE_LIMIT}'
-        playlist_response = requests.get(url, headers=header)
-        return playlist_response.json()
-    elif request.method == 'PUT':
-        request_data = request.get_json()
-        url = f'https://api.spotify.com/v1/me'
-        r = requests.get(url, headers=header)
-        user_id = r.json()['id']
-        url = f'https://api.spotify.com/v1/users/{user_id}/playlists'
-        playlist_data = {
-            'name': request_data['playlist_name'],
-            'description': request_data['description'],
-            'public': False
-        }
-        r = requests.post(url, json=playlist_data, headers=header)
-        new_playlist_id = r.json()['id']
-        new_track_ids = request_data['ids']
-        request_num = math.ceil(len(new_track_ids) / 100)
-        startIndex = 0
-        endIndex = 100
-        url = f'https://api.spotify.com/v1/playlists/{new_playlist_id}/tracks'
-        for i in range(request_num):
-            r = requests.post(url, json=new_track_ids[startIndex:endIndex], headers=header)
-            tempIndex = endIndex
-            startIndex = tempIndex + 1
-            endIndex = tempIndex + 100
-        # return {'playlistID': True}, 200
-        return {'playlistID': new_playlist_id}, 200
+    try:
+        # raise Exception('Test')
+        header = get_token_header(session['access_token'])
+        if request.method == 'GET':
+            page_args = request.args.get("page")
+            page = 0
+            if  page_args is not None: page = (int(page_args)-1) * PAGE_LIMIT
+            url = f'https://api.spotify.com/v1/me/playlists?offset={page}&limit={PAGE_LIMIT}'
+            playlist_response = requests.get(url, headers=header)
+            return playlist_response.json()
+        elif request.method == 'PUT':
+            request_data = request.get_json()
+            url = f'https://api.spotify.com/v1/me'
+            r = requests.get(url, headers=header)
+            user_id = r.json()['id']
+            url = f'https://api.spotify.com/v1/users/{user_id}/playlists'
+            playlist_data = {
+                'name': request_data['playlist_name'],
+                'description': request_data['description'],
+                'public': False
+            }
+            r = requests.post(url, json=playlist_data, headers=header)
+            new_playlist_id = r.json()['id']
+            new_track_ids = request_data['ids']
+            request_num = math.ceil(len(new_track_ids) / 100)
+            startIndex = 0
+            endIndex = 100
+            url = f'https://api.spotify.com/v1/playlists/{new_playlist_id}/tracks'
+            for i in range(request_num):
+                r = requests.post(url, json=new_track_ids[startIndex:endIndex], headers=header)
+                tempIndex = endIndex
+                startIndex = tempIndex + 1
+                endIndex = tempIndex + 100
+            # return {'playlistID': True}, 200
+            return {'playlistID': new_playlist_id}, 200
+    except Exception as e:
+        logging.error(f"Error while retrieving all of user's playlist {e}")
+        return {'message': 'Error getting your playlists'}, 500    
+    
 
 @auth_app.route('/playlists/<pid>', methods=["GET"])
 @requires_auth
 def get_spotify_playlist(pid):
-    url = f'https://api.spotify.com/v1/playlists/{pid}'
-    header = get_token_header(session['access_token'])
-    playlist_response = requests.get(url, headers=header)
-    return playlist_response.json()
+    try:
+        url = f'https://api.spotify.com/v1/playlists/{pid}'
+        header = get_token_header(session['access_token'])
+        playlist_response = requests.get(url, headers=header)
+        return playlist_response.json()
+    except Exception as e:
+        logging.error(f"Error getting playlist {pid}. {e}")
+        return {'message': f'Error getting playlist id: {pid}'}, 500
+    
 
 @auth_app.route('/playlists/<pid>/tracks', methods=["GET"])
 @requires_auth
 def get_spotify_playlist_tracks(pid):
-    tracks = {'items': []}
-    next = True
-    first = True
-    url = ''
-    while next:
-        if first:
-            url = f'https://api.spotify.com/v1/playlists/{pid}/tracks'
-            first = False
-        header = get_token_header(session['access_token'])
-        playlist_track_response = requests.get(url, headers=header).json()
-        tracks['items'].extend(playlist_track_response['items'])
-        url = playlist_track_response.get('next')
-        if playlist_track_response['next'] is None:
-            tracks['playlist'] = get_spotify_playlist(pid)
-            next = False
-            continue
-    return tracks
+    try:
+        tracks = {'items': []}
+        next = True
+        first = True
+        url = ''
+        while next:
+            if first:
+                url = f'https://api.spotify.com/v1/playlists/{pid}/tracks'
+                first = False
+            header = get_token_header(session['access_token'])
+            playlist_track_response = requests.get(url, headers=header).json()
+            tracks['items'].extend(playlist_track_response['items'])
+            url = playlist_track_response.get('next')
+            if playlist_track_response['next'] is None:
+                tracks['playlist'] = get_spotify_playlist(pid)
+                next = False
+                continue
+        return tracks
+    except Exception as e:
+        logging.error(f'Error retrieving playlist tracks for playlist id: {pid}')
+        return {'message': f'Error getting playlist track for playlist id: {pid}'}, 500
 
 @auth_app.route('/playlists/search', methods=["GET"])
 @requires_auth
 def search_playlists():
-    search_query = request.args['q']
-    page = request.args.get('p')
-    offset = 0
-    if page != '1': offset = (int(page)-1) * PAGE_LIMIT
-    url = f'https://api.spotify.com/v1/search?q={search_query}&type=playlist&limit={PAGE_LIMIT}&offset={offset}'
-    header = get_token_header(session["access_token"])
-    res = requests.get(url, headers=header)
-    return {'status': 200, 'data': res.json()}
-
-# @auth_app.route('/playlists/search/<page>', methods=["GET"])
-# @requires_auth
-# def search_playlists_page(page):
-#     header = get_token_header(session["access_token"])
-#     res = requests.get(page, headers=header)
-#     return {'status': 200, 'data': res.json()}
+    try:
+        search_query = request.args['q']
+        logging.info(f'Search query {search_query}')
+        page = request.args.get('p')
+        offset = 0
+        if page != '1': offset = (int(page)-1) * PAGE_LIMIT
+        url = f'https://api.spotify.com/v1/search?q={search_query}&type=playlist&limit={PAGE_LIMIT}&offset={offset}'
+        header = get_token_header(session["access_token"])
+        res = requests.get(url, headers=header)
+        return {'status': 200, 'data': res.json()}
+    except Exception as e:
+        logging.error(f'Error retrieving playlist search with query: {search_query}')
+        return {'message': f'Error retrieving playlist search'}, 500
 
 # Tracks
 @auth_app.route('/tracks/<tid>', methods=["GET"])
 @requires_auth
 def get_spotify_tracks(tid):
-    url = f'https://api.spotify.com/v1/tracks/{tid}'
-    header = get_token_header(session['access_token'])
-    track_response = requests.get(url, headers=header).json()
-    return extract_track(track_response)
+    try:
+        url = f'https://api.spotify.com/v1/tracks/{tid}'
+        header = get_token_header(session['access_token'])
+        track_response = requests.get(url, headers=header).json()
+        return extract_track(track_response)
+    except Exception as e:
+        logging.error(f'Error retrieving track: {tid}')
+        return {'message': f'Error retrieving track: {tid}'}, 500
     # return track_response
 
 @auth_app.route('/tracks/<tid>/clean', methods=["GET"])
 @requires_auth
 def search_spotify_clean_tracks(tid):
-    url = f'https://api.spotify.com/v1/tracks/{tid}'
-    header = get_token_header(session['access_token'])
-    track_response = requests.get(url, headers=header).json()
-    if not track_response['explicit']:
-        return {'items': track_response, 'exact_match': True}
-    current_track_hash = get_track_hash(track_response)
+    try:
+        url = f'https://api.spotify.com/v1/tracks/{tid}'
+        header = get_token_header(session['access_token'])
+        track_response = requests.get(url, headers=header).json()
+        if not track_response['explicit']:
+            return {'items': track_response, 'exact_match': True}
+        current_track_hash = get_track_hash(track_response)
 
-    artist_query = ''
-    for artist in track_response['artists']:
-        artist_query += f"{artist['name']} "
-    search_query = f"{track_response['name']} {artist_query}"
-    search_url = f'https://api.spotify.com/v1/search?q={search_query}&type=track&limit=5'
-    search_response = requests.get(search_url, headers=header).json()
-    search_response_obj = list()
-    for result in search_response['tracks']['items']:
-        if not result['explicit']:
-            track_hash = get_track_hash(result)
-            search_response_obj.append(extract_track(result))
-            if track_hash == current_track_hash:
-               return {'items': extract_track(result), 'exact_match': True}
-    
-    return {'items': search_response_obj, 'exact_match': False}
+        artist_query = ''
+        for artist in track_response['artists']:
+            artist_query += f"{artist['name']} "
+        search_query = f"{track_response['name']} {artist_query}"
+        search_url = f'https://api.spotify.com/v1/search?q={search_query}&type=track&limit=5'
+        search_response = requests.get(search_url, headers=header).json()
+        search_response_obj = list()
+        for result in search_response['tracks']['items']:
+            if not result['explicit']:
+                track_hash = get_track_hash(result)
+                search_response_obj.append(extract_track(result))
+                if track_hash == current_track_hash:
+                    return {'items': extract_track(result), 'exact_match': True}
+        
+        return {'items': search_response_obj, 'exact_match': False}
+    except Exception as e:
+        logging.error(f'Error searching for clean tracks of: {tid}')
+        return {'items': None, 'exact_match': False}
 
 # @auth_app.route('/playlists/<pid>/clean', methods=["GET"])
 # @requires_auth

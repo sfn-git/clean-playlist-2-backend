@@ -1,4 +1,4 @@
-from flask import Blueprint, session
+from flask import Blueprint
 
 index_app = Blueprint('index', __name__)
 
