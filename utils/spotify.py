@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from hashlib import md5
 import requests
 import os
@@ -86,8 +86,6 @@ def get_track_hash(track):
     track_string = f"{track_name}{artist_names}{album_name}"
     # print(track_string, track['explicit'])
     return md5(track_string.encode('utf-8')).hexdigest()
-
-from datetime import date, datetime
 
 def json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""

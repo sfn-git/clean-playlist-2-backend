@@ -8,7 +8,6 @@ from flask_session import Session #https://flask-session.readthedocs.io/en/lates
 from cachelib.file import FileSystemCache
 from utils.logging import logging
 import os
-import shutil
 
 # Handles sessions directory
 dir_path="./sessions"
@@ -34,14 +33,13 @@ if ENV == 'prod':
     logging.warning(f"Running in {ENV}")
 else:
     app.secret_key = "development" #session will stay on app reset
-    logging.info(f"Running in {ENV}")
+    logging.info(f"Running in dev")
 
 CORS(app, supports_credentials=True)
 Session(app)
 
 @app.errorhandler(404)
 def page_not_found(error):
-    d = {'status': 404, 'message': 'Resource not found.'}
-    return d, 404
+    return {'status': 404, 'message': 'Resource not found.'}, 404
 
 app.run(port=8080, host="0.0.0.0")

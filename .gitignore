@@ -6,3 +6,4 @@ debug.log
 sessions
 logs
 *.log
+venv/
